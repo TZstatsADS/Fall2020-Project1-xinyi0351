@@ -1,0 +1,326 @@
+---
+title: "How to win female voters"
+author: "Xinyi Zhang (xz2862)"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+
+Researchers noticed a gender gap between male and female voters since 1970s. It has been said that the result of elections are decided by women. Is that true? And if that's true, what kind of government are female voters looking for? In this study, I will focus on those questions with exploratory data analysis.
+
+The datasets can be found at [American National Election Study (ANES)](https://electionstudies.org/data-center/anes-time-series-cumulative-data-file/). I select data of the election years.
+
+```{r}
+data <- read.csv('anes_pilot_2020ets_csv.csv')
+```
+
+```{r}
+library(tidyverse)
+library(haven)
+library(RColorBrewer)
+library(ggplot2)
+library(ggpubr)
+library(gridExtra)
+```
+
+```{r}
+# Load time series data
+anes_dat<-read_sav("anes_timeseries_cdf.sav")
+```
+
+```{r}
+election_years=as.character(seq(1948, 2016, 4))
+data<-anes_dat%>%
+  transmute(
+    year=as_factor(VCF0004),
+    turnout=as_factor(VCF0703),
+    vote=as_factor(VCF0706),
+    age = as_factor(VCF0102),
+    gender=as_factor(VCF0104),
+    # share with the family
+    party=as_factor(VCF0302),
+    partyoffather = as_factor(VCF0306),
+    partyofmother = as_factor(VCF0307),
+    #info on president
+    intelligent = as_factor(VCF0338),
+    compassionate = as_factor(VCF0339),
+    decent = as_factor(VCF0340),
+    inspring = as_factor(VCF0341),
+    knowledgeable = as_factor(VCF0342),
+    moral = as_factor(VCF0343),
+    leadership = as_factor(VCF0344),
+    cares = as_factor(VCF0345),
+    #behavior
+    influenceothers = as_factor(VCF0717),
+    talkwithothers = as_factor(VCF0732),
+    #opinion
+    womenequal = as_factor(VCF0834),
+    healthinsurance = as_factor(VCF0806),
+    job = as_factor(VCF0809),
+    mostimportant = as_factor(VCF0875),
+    #parties
+    republican_healthinsurance = as_factor(VCF9093),
+    republican_womenequal = as_factor(VCF9091), #VCF0538
+    republican_defense = as_factor(VCF9089),
+    democratic_healthinsurance = as_factor(VCF9085),
+    democratic_womenqual = as_factor(VCF9081),
+    democratic_defense = as_factor(VCF9087)
+    ) %>% filter(year %in% election_years)
+
+levels(data$age) <- c('NA','17-24','25-34','35-44','45-54','55-64','65-74','75 and over')
+levels(data$vote) <- c('NA','Democrat','Republican','Major thrid party','Other','Did not vote')
+
+# save data
+#save(data, file="../mydata.RData")
+```
+
+## Is there a gender gap?
+```{r}
+# gender gaps
+gap <- data %>% select(gender,year,vote) %>% filter(!is.na(gender) & gender != '3. Other (2016)') %>%
+  group_by(gender,vote,year) %>% count() %>%
+  filter(vote %in% c('Democrat','Republican')) %>%
+  pivot_wider(names_from = c(vote,gender), values_from = n) %>%
+  pivot_longer(-year, names_to = 'variable', values_to = 'count') %>%
+  mutate(variable = as_factor(variable))
+
+#levels(gap$variable)
+
+ggplot(gap) +geom_bar(stat = 'identity',aes(x=year,y=count,fill = variable),position ='dodge')+
+  scale_fill_manual(values=c('#4ea1d3', "#d8e9ef","#e85a71","pink"))+
+  labs(title = 'Gender gap in Registered voters')+
+  theme_light()+
+  theme(legend.position = 'bottom')
+```
+
+The gender gap in voting refers to the difference in the percentage of women and the percentage of men voting for a given candidate. With blues representing male's votes and pink representing female's votes, the graph shows different preference between men and women. I would say there is a gender gap in 1980 as men voted more for republic while women vote two parties evenly. The gender gap is more obvious in recent years. In 2000, more women vote for democratic and men vote oppositely more to republic. Same scenario in 2004 and 2016. 
+
+## Is it true that women voters decide election?
+```{r}
+# how many people participate in the survey?
+data %>% select(year,gender) %>% filter(!is.na(gender) & gender != '3. Other (2016)') %>%
+  ggplot() + 
+  geom_bar(aes(x=year,fill = gender),position = 'dodge') +
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#d8e9ef","#454552"))+
+  labs(title = 'Study Respondednt Number')+
+  theme_light()
+
+how_many_people <- data %>% select (year, gender) %>% 
+  filter(!is.na(gender) & gender != '3. Other (2016)') %>%
+  group_by(year, gender) %>% count() %>% pivot_wider(names_from = gender, values_from = n) %>% 
+  transform(gap = `2. Female` - `1. Male`)
+
+mean(how_many_people$gap)
+
+ggplot(how_many_people) + geom_bar(aes(x = year, y = gap),stat = 'identity') +
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#d8e9ef","#454552"))+
+  labs(title = 'Gender gap in Registered voters')+
+  theme_light()
+```
+
+Apart from the unknown cases in 2016, in most years numbers of male and female share the same trend of changing. It is clear to see from the table that the number in each year there are more women registered for voting than men. The wildest gap appear in 1972 with 369 more women registered than men. On average, 213 more women registered for voting.
+
+```{r}
+# compare male and female by age group
+data %>% filter(!is.na(gender)& gender != '3. Other (2016)') %>% group_by(age) %>% count() %>% transform(percentage = n/sum(n))
+
+data %>% select(age, gender) %>% filter(!is.na(gender)& gender != '3. Other (2016)')  %>% group_by(age,gender) %>% ggplot+
+  geom_bar(aes(x=age, fill=gender),position = 'dodge') +
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#d8e9ef","#454552"))+
+  labs(title = 'Study Respondednt Number by Age Group')+
+  theme_light()
+```
+
+The graph shows an overall distribution on the participates' age. Most of those who participate in the survey are between 25-64. Famale voters outnumber male voters in every age group. It is true that presidential election is a women's game. If they want, they can basically decide who will be the new president. 
+
+```{r}
+data %>% select(turnout, gender, year) %>% 
+  filter(!is.na(gender)& gender != '3. Other (2016)' & !is.na(turnout)) %>%
+  ggplot() +
+  geom_bar(aes(x=year,fill = gender),position = 'dodge') + 
+  facet_wrap(~turnout, ncol = 1)+
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#d8e9ef","#454552"))+
+  labs(title = 'Number of Turnout with gender')+
+  theme_light()
+```
+
+Is it true women voters decide the election? I would say YES! With graphs shown before, it is clear that women tend to be more involved in votings. There are more women voters registered and voted, even more women voters in every age group.
+
+## Are women tend to follow their parents' political standing?
+
+```{r}
+parties <- data %>% select(gender,party,partyoffather,partyofmother) %>% 
+  filter(party %in% c('1. Republican','2. Independent','5. Democrat')) %>%
+  filter(partyofmother %in% c('1. Democrat','2. Independent','3. Republican')) %>%
+  filter(partyoffather %in% c('1. Democrat','2. Independent (some years also: shifted around)','3. Republican')) %>% 
+  transmute(gender, party = as_factor(party), father = as_factor(partyoffather), mother = as_factor(partyofmother)) %>%
+  mutate(party = droplevels(party),father = droplevels(father), mother = droplevels(mother))
+
+levels(parties$party) <- c('Republican','Independent','Democrat')
+levels(parties$father) <- c('Democrat','Independent','Republican')
+levels(parties$mother) <- c('Democrat','Independent','Republican')
+
+parties <- parties %>% transform(sharef = as.numeric(party == father), sharem =as.numeric(party==mother), shareb =as.numeric(party==mother&party==father)) %>% 
+  select(gender,party,sharef, sharem, shareb) %>%
+  group_by(gender,party) %>% 
+  summarise(sharef = sum(sharef),sharem = sum(sharem),shareb = sum(shareb)) %>%
+  pivot_longer(c(sharef,sharem,shareb),names_to = 'same_with', values_to = 'number')
+
+# calculate the percentage
+parties['percentage'] = 1
+parties[which(parties$gender == '1. Male'),]['percentage'] = parties[which(parties$gender == '1. Male'),]['number']/3620 #total number of male voters in parties table
+parties[which(parties$gender == '2. Female'),]['percentage'] = parties[which(parties$gender == '2. Female'),]['number']/4600 #total number of female voters in parties table
+  
+ggplot(parties) +
+  geom_bar(aes(x=party,y = percentage, fill = same_with),stat = 'identity', position = 'dodge') +
+  facet_wrap(~gender)+
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#454552"))+
+  labs(title = 'Share the same Political Position with Parents')+
+  theme_light()
+```
+
+The percentage is calculated by number within each category over the total number of the gender. In general, female has a higher proportion of sharing same political stand with their family. As for parties, democrats shows a higher likelihood have the same party choice with their parents, where male falls behind and independent party shows the smallest percentage among the three. which outnumbered male in both republican and democrat. It is interesting to notice that in both republican and democrat group, the percentage of share the same party with either father slightly higher than sharing with mother or both of the parents. 
+
+
+## What are women looking for in a president?
+
+```{r}
+to_levels <- function(x){
+  x <- droplevels(x)
+  #levels(x) <- c(1,2,3,4)
+  return(x)
+}
+personality <- data %>% filter(gender == '2. Female') %>% 
+  select(intelligent,compassionate,decent,inspring,knowledgeable,moral,leadership,cares) %>%
+  transmute(intelligent = to_levels(intelligent), compassionate = to_levels(compassionate),
+         decent = to_levels(decent), inspring = to_levels(inspring), 
+         knowledgeable = to_levels(knowledgeable), moral = to_levels(moral),
+         leadership = to_levels(leadership),cares = to_levels(cares))
+
+# create pie chart for each character
+mytheme<- function(){
+  theme_light() + theme(legend.position = 'None') + 
+  theme(axis.line=element_blank(),
+      axis.text.x=element_blank(),
+      axis.title.y=element_blank(),
+      legend.position="none")
+}
+
+intelligent <- personality %>% select(intelligent) %>% filter(!is.na(intelligent)) %>%
+  ggplot() + geom_bar(aes(x=intelligent, fill = intelligent)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#d8e9ef","#454552"))+
+  mytheme()
+compassionate <- personality %>% select(compassionate) %>% filter(!is.na(compassionate)) %>%
+  ggplot() + geom_bar(aes(x=compassionate, fill = compassionate)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#d8e9ef","#454552"))+
+  mytheme()
+decent <- personality %>% select(decent) %>% filter(!is.na(decent)) %>%
+  ggplot() + geom_bar(aes(x=decent, fill = decent)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#d8e9ef","#454552"))+
+  mytheme()
+inspring <- personality %>% select(inspring) %>% filter(!is.na(inspring)) %>%
+  ggplot() + geom_bar(aes(x=inspring, fill = inspring)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#d8e9ef","#454552"))+
+  mytheme()
+knowledgeable <- personality %>% select(knowledgeable) %>% filter(!is.na(knowledgeable)) %>%
+  ggplot() + geom_bar(aes(x=knowledgeable, fill = knowledgeable)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#d8e9ef","#454552"))+
+  mytheme()
+moral <- personality %>% select(moral) %>% filter(!is.na(moral)) %>%
+  ggplot() + geom_bar(aes(x=moral, fill = moral)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#d8e9ef","#454552"))+
+  mytheme()
+leadership <- personality %>% select(leadership) %>% filter(!is.na(leadership)) %>%
+  ggplot() + geom_bar(aes(x=leadership, fill = leadership)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#d8e9ef","#454552"))+
+  mytheme()
+cares <- personality %>% select(cares) %>% filter(!is.na(cares)) %>%
+  ggplot() + geom_bar(aes(x=cares, fill = cares)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3', "#e85a71","#d8e9ef","#454552"))+
+  mytheme()
+fig1 <- ggarrange(intelligent,compassionate,decent,inspring,knowledgeable, moral, leadership, cares
+          + rremove("x.text"), ncol = 4, nrow = 2,
+          legend = "bottom",common.legend = TRUE)
+annotate_figure(fig1,
+               top = text_grob("Pie charts on Presidents' traits"))
+```
+
+The graph above shows different characteristic female voters see in the president. Eight featrues are collected and graded on scale 1-4 from extremly well to not well at all. It is eye-catching that for every pie chart, most people choose quite well, except for inspring and cares. Intelligence is revealed to be the most recogized trait, follows by decent and moral. Cares is graded as the least trait, and inspring is the second least one. The result can be explained in many ways. Candidates may show more about caring and inspring to the women voters, thus to support a brand-new image of president. 
+
+## What topics are women voters care about?
+
+```{r}
+table(data$mostimportant)
+data %>% select(gender, mostimportant) %>% filter(!is.na(mostimportant) & gender == '2. Female') %>%
+  ggplot(aes(x=mostimportant)) + geom_bar(colour = '#4ea1d3') + coord_flip() + 
+  theme_light()+ theme(legend.position = 'None') +
+                      labs(title = 'Topics Women care about')
+```
+
+It is clear to see that women care most in social welfare, foreign affairs and national defense, and also economics, business and consumer issues. So we'll look into thses three parts. 
+
+```{r}
+hi <- data %>% select(healthinsurance, republican_healthinsurance,democratic_healthinsurance) %>% 
+  transmute(republican = to_levels(republican_healthinsurance), democratic = to_levels(democratic_healthinsurance), hi = to_levels(healthinsurance)) %>%
+  filter(hi == "9. DK; haven't thought much about it")
+
+re <- hi %>% select(republican) %>% filter(!is.na(republican)) %>% ggplot() + 
+  geom_bar(aes(x=republican, fill = republican)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3',"#e85a71","#d8e9ef","#454552",'pink','lightblue','gray')) + mytheme()
+de <- hi %>% select(democratic) %>% filter(!is.na(democratic)) %>% ggplot() + 
+  geom_bar(aes(x=democratic, fill = democratic)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3',"#e85a71","#d8e9ef","#454552",'pink','lightblue','gray')) + mytheme()
+fig2 <- ggarrange(re + rremove('x.text'),de + rremove('x.text'), ncol = 2, nrow = 1,
+          legend = "bottom",common.legend = TRUE)
+annotate_figure(fig2,
+               top = text_grob("Opinion on health insurance"))
+```
+It can be seen that republicans are more tend to choose private insurance while democratic tend to support government insurance plan. As most of the women voting democratic, they care more about social walfare in a sense that government should help people especially those who are too poor to afford private insurance. 
+
+```{r}
+defense <- data %>% select(republican_defense,democratic_defense) %>% 
+  transmute(republican = to_levels(republican_defense), democratic = to_levels(democratic_defense))
+
+re <- defense %>% select(republican) %>% filter(!is.na(republican)) %>% ggplot() + 
+  geom_bar(aes(x=republican, fill = republican)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3',"#e85a71","#d8e9ef","#454552",'pink','lightblue','gray')) + theme_light()
+de <- defense %>% select(democratic) %>% filter(!is.na(democratic)) %>% ggplot() + 
+  geom_bar(aes(x=democratic, fill = democratic)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3',"#e85a71","#d8e9ef","#454552",'pink','lightblue','gray')) + theme_light()
+fig3 <- ggarrange(re+ rremove("x.text"),de + rremove("x.text"), ncol = 2, nrow = 1,
+          legend = "bottom",common.legend = TRUE)
+annotate_figure(fig3,
+               top = text_grob("Opinion on defense spending"))
+```
+
+Again, republican and democratic show nearly opposite opinion on defense spending. Most republican are in favor of increase defense spending while most democratic perfer to decrease spending on defense but on others. Women voters are favor of the latter one.
+
+```{r}
+right <- data %>% select(republican_womenequal,democratic_womenqual) %>% 
+  transmute(republican = to_levels(republican_womenequal), democratic = to_levels(democratic_womenqual))
+
+re <- right %>% select(republican) %>% filter(!is.na(republican)) %>% ggplot() + 
+  geom_bar(aes(x=republican, fill = republican)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3',"#e85a71","#d8e9ef","#454552",'pink','lightblue','gray')) + theme_light()
+de <- right %>% select(democratic) %>% filter(!is.na(democratic)) %>% ggplot() + 
+  geom_bar(aes(x=democratic, fill = democratic)) + coord_polar(start = 0) +
+  scale_fill_manual(values=c('#4ea1d3',"#e85a71","#d8e9ef","#454552",'pink','lightblue','gray')) + theme_light()
+fig4 <- ggarrange(re+ rremove("x.text"),de + rremove("x.text"), ncol = 2, nrow = 1,
+          legend = "bottom",common.legend = TRUE)
+annotate_figure(fig4,
+               top = text_grob("Opinion on women's Equal Role Scale"))
+```
+
+On women's equal role, there are not no big difference in distribution between the two parties. Except that republicans firmly believe that man and women should have an equal role while democratics may not be that sure with a second mode be in the 3rd scale. 
+
+## Findings
+
+There exists a gender gap since 1976. On average there are 213 more female voters in each election year, and female voters outnumbered male voters in every age group. It is kind of true that female voters would determine the outcome of the election. 
+
+Compared between male and female voters, the latter one are more likely to share same political stand with their parents. Among three parties that are selected, democrats tend to share within the family then republicans. 
+
+Because of that, candidates may want to study how to win female voters. It turns out the female voters do not give a compliment on presidents' caring and inspiration but also commend their intelligence, decency and morality. Candidates who show more caring may be a refreshment for everyone.
+
+The most hot topics among female voters are social welfare, foreign affair and national defense, economic, business and consumer issue. I studied health insurance as a facet of social welfare and take defense spending a representative of national defense. It is interesting to notice that two parties have quite opposite opinion on both of them. Republicans prefer private insurance plan and increasing nation defense while democrats support government insurance plan and greatly decreasing defense spending. I also studied their opinion on women's equal role in voting. Surprisingly republicans seem to support more on the equal rights
